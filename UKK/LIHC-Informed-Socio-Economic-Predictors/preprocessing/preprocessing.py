@@ -94,7 +94,7 @@ QR_FEATURES = [
     "main_heating_source",
     # "heating_control",
     "household_size",
-    "Country"
+    # "Country"
     # "children_present",
     # "elderly_present",
     # "C2",
@@ -368,6 +368,8 @@ df_hqrtm_60 = assign_hqrtm(
     country_col="Country",
     income_rule="country_median_60",
     quantile=0.60,
+    add_country_effects= True,
+    margin_scale=0.10,
 )
 
 df_hqrtm_65 = assign_hqrtm(
@@ -378,6 +380,8 @@ df_hqrtm_65 = assign_hqrtm(
     country_col="Country",
     income_rule="country_median_60",
     quantile=0.65,
+    add_country_effects= True,
+    margin_scale=0.10,
 )
 
 df_hqrtm_70 = assign_hqrtm(
@@ -388,6 +392,8 @@ df_hqrtm_70 = assign_hqrtm(
     country_col="Country",
     income_rule="country_median_60",
     quantile=0.70,
+    add_country_effects= True,
+    margin_scale=0.10,
 )
 
 # =========================

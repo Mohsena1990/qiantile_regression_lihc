@@ -1035,6 +1035,166 @@ def assign_traditional_lihc(
     return out
 
 
+# def assign_hqrtm(
+#     df: pd.DataFrame,
+#     qr_features: list,
+#     income_col: str = "equivalized_income",
+#     exp_col: str = "total_expenditure",
+#     country_col: str = "Country",
+#     income_rule: str = "country_median_60",
+#     quantile: float = 0.65,
+#     min_rows: int = 30,
+#     income_bracket_col: str = "income_bracket",
+# ) -> pd.DataFrame:
+#     """
+#     HQRTM categorization:
+#     low income + conditional high expenditure via country-specific quantile regression.
+
+#     Parameters
+#     ----------
+#     df : pd.DataFrame
+#         Input dataframe.
+#     qr_features : list
+#         Structural predictors used in country-specific quantile regression.
+#         Example:
+#         [
+#             "floor_area",
+#             "house_age",
+#             "household_size",
+#             "house_detachment",
+#             "has_insulation",
+#             "heating_strategy",
+#             "birth_year_respondent",
+#         ]
+#     income_col : str
+#         Continuous income variable, preferably equivalized income.
+#     exp_col : str
+#         Annual energy expenditure variable.
+#     country_col : str
+#         Country/group variable.
+#     income_rule : str
+#         'country_median_60' -> low income if income < 60% of country median.
+#         'bracket_lt4' -> low income if income_bracket < 4.
+#     quantile : float
+#         Quantile frontier for HQRTM.
+#         Recommended sensitivity values: 0.60, 0.65, 0.70
+#     min_rows : int
+#         Minimum valid rows per country to fit QR.
+#     income_bracket_col : str
+#         Income bracket column, used only if income_rule='bracket_lt4'.
+
+#     Returns
+#     -------
+#     pd.DataFrame
+#         Copy of df with:
+#         - national_median_income
+#         - lihc_income_threshold
+#         - low_income
+#         - expected_exp
+#         - relative_exp
+#         - high_exp_flag
+#         - qr_valid_flag
+#         - risk_category
+#     """
+#     if qr_features is None or len(qr_features) == 0:
+#         raise ValueError("qr_features must be a non-empty list")
+
+#     if quantile not in [0.60, 0.65, 0.70]:
+#         raise ValueError("For this study, quantile should be one of [0.60, 0.65, 0.70]")
+
+#     out = df.copy()
+
+#     required_cols = [country_col, exp_col] + qr_features
+#     if income_rule == "country_median_60":
+#         required_cols.append(income_col)
+#     elif income_rule == "bracket_lt4":
+#         required_cols.append(income_bracket_col)
+#     else:
+#         raise ValueError("income_rule must be 'country_median_60' or 'bracket_lt4'")
+
+#     missing_cols = [c for c in required_cols if c not in out.columns]
+#     if missing_cols:
+#         raise KeyError(f"Missing required columns: {missing_cols}")
+
+#     # ---------- low-income side ----------
+#     out["national_median_income"] = np.nan
+#     out["lihc_income_threshold"] = np.nan
+
+#     if income_rule == "country_median_60":
+#         out["national_median_income"] = out.groupby(country_col)[income_col].transform("median")
+#         out["lihc_income_threshold"] = 0.60 * out["national_median_income"]
+#         out["low_income"] = out[income_col] < out["lihc_income_threshold"]
+
+#     elif income_rule == "bracket_lt4":
+#         out["low_income"] = out[income_bracket_col] < 4
+
+#     # ---------- conditional expenditure frontier ----------
+#     out["expected_exp"] = np.nan
+#     out["relative_exp"] = np.nan
+#     out["high_exp_flag"] = False
+#     out["qr_valid_flag"] = False
+
+#     for country, group in out.groupby(country_col):
+#         try:
+#             group = group.copy()
+#             group = group.replace([np.inf, -np.inf], np.nan)
+
+#             valid_fit = group.dropna(subset=[exp_col] + qr_features)
+#             if len(valid_fit) < min_rows:
+#                 print(f"⚠️ {country}: skipped (too few valid rows: {len(valid_fit)})")
+#                 continue
+
+#             formula = f"{exp_col} ~ " + " + ".join(qr_features)
+#             model = smf.quantreg(formula, data=valid_fit)
+#             res = model.fit(q=quantile, max_iter=5000, disp=False)
+
+#             valid_pred = group.dropna(subset=qr_features)
+#             if len(valid_pred) == 0:
+#                 print(f"⚠️ {country}: no rows available for prediction")
+#                 continue
+
+#             expected = pd.Series(index=group.index, dtype=float)
+#             expected.loc[valid_pred.index] = res.predict(valid_pred)
+
+#             out.loc[group.index, "expected_exp"] = expected
+#             out.loc[group.index, "relative_exp"] = group[exp_col] - expected
+#             margin = np.nanstd(group[exp_col]) * 0.1
+#             out.loc[group.index, "high_exp_flag"] = (group[exp_col] > (expected + margin))
+#             # out.loc[group.index, "high_exp_flag"] = (group[exp_col] > expected).fillna(False)
+#             out.loc[group.index, "qr_valid_flag"] = True
+
+#             print(
+#                 f"[{country}] HQRTM q={quantile:.2f}, "
+#                 f"pseudo_R2={getattr(res, 'prsquared', np.nan):.3f}, "
+#                 f"high_exp={(group[exp_col] > expected).mean():.2%}, "
+#                 f"n_fit={len(valid_fit)}"
+#             )
+
+#         except Exception as e:
+#             print(f"⚠️ Quantile regression failed for {country}: {e}")
+
+#     # ---------- four classes ----------
+#     out["risk_category"] = np.select(
+#         [
+#             out["low_income"] & out["high_exp_flag"],
+#             out["low_income"] & ~out["high_exp_flag"],
+#             ~out["low_income"] & out["high_exp_flag"],
+#         ],
+#         [
+#             "Double risk",
+#             "Income risk",
+#             "Expenditure risk",
+#         ],
+#         default="No risk",
+#     )
+
+#     return out
+
+import numpy as np
+import pandas as pd
+import statsmodels.formula.api as smf
+
+
 def assign_hqrtm(
     df: pd.DataFrame,
     qr_features: list,
@@ -1043,29 +1203,28 @@ def assign_hqrtm(
     country_col: str = "Country",
     income_rule: str = "country_median_60",
     quantile: float = 0.65,
-    min_rows: int = 30,
+    min_rows: int = 100,
     income_bracket_col: str = "income_bracket",
+    add_country_effects: bool = True,
+    margin_scale: float = 0.10,
 ) -> pd.DataFrame:
     """
     HQRTM categorization:
-    low income + conditional high expenditure via country-specific quantile regression.
+    low income + pooled conditional high expenditure via quantile regression.
+
+    Main change from the previous version:
+    -------------------------------------
+    - This version fits ONE pooled quantile regression for the full sample
+      instead of a separate model inside each country.
+    - Country enters as a categorical effect if add_country_effects=True.
+    - This avoids forcing nearly identical high-exp shares in every country.
 
     Parameters
     ----------
     df : pd.DataFrame
         Input dataframe.
     qr_features : list
-        Structural predictors used in country-specific quantile regression.
-        Example:
-        [
-            "floor_area",
-            "house_age",
-            "household_size",
-            "house_detachment",
-            "has_insulation",
-            "heating_strategy",
-            "birth_year_respondent",
-        ]
+        Structural predictors used in pooled quantile regression.
     income_col : str
         Continuous income variable, preferably equivalized income.
     exp_col : str
@@ -1077,11 +1236,16 @@ def assign_hqrtm(
         'bracket_lt4' -> low income if income_bracket < 4.
     quantile : float
         Quantile frontier for HQRTM.
-        Recommended sensitivity values: 0.60, 0.65, 0.70
+        Recommended values: 0.60, 0.65, 0.70
     min_rows : int
-        Minimum valid rows per country to fit QR.
+        Minimum valid rows required to fit pooled QR.
     income_bracket_col : str
         Income bracket column, used only if income_rule='bracket_lt4'.
+    add_country_effects : bool
+        If True, include C(country_col) in the pooled QR.
+    margin_scale : float
+        Optional margin added above predicted expenditure threshold.
+        Example: 0.10 means 10% of overall std(exp_col).
 
     Returns
     -------
@@ -1096,7 +1260,7 @@ def assign_hqrtm(
         - qr_valid_flag
         - risk_category
     """
-    if qr_features is None or len(qr_features) == 0:
+    if not qr_features:
         raise ValueError("qr_features must be a non-empty list")
 
     if quantile not in [0.60, 0.65, 0.70]:
@@ -1104,7 +1268,11 @@ def assign_hqrtm(
 
     out = df.copy()
 
+    # -----------------------------
+    # Required columns
+    # -----------------------------
     required_cols = [country_col, exp_col] + qr_features
+
     if income_rule == "country_median_60":
         required_cols.append(income_col)
     elif income_rule == "bracket_lt4":
@@ -1116,7 +1284,9 @@ def assign_hqrtm(
     if missing_cols:
         raise KeyError(f"Missing required columns: {missing_cols}")
 
-    # ---------- low-income side ----------
+    # -----------------------------
+    # Low-income side
+    # -----------------------------
     out["national_median_income"] = np.nan
     out["lihc_income_threshold"] = np.nan
 
@@ -1128,50 +1298,76 @@ def assign_hqrtm(
     elif income_rule == "bracket_lt4":
         out["low_income"] = out[income_bracket_col] < 4
 
-    # ---------- conditional expenditure frontier ----------
+    # -----------------------------
+    # Conditional expenditure side
+    # -----------------------------
     out["expected_exp"] = np.nan
     out["relative_exp"] = np.nan
     out["high_exp_flag"] = False
     out["qr_valid_flag"] = False
 
-    for country, group in out.groupby(country_col):
-        try:
-            group = group.copy()
-            group = group.replace([np.inf, -np.inf], np.nan)
+    model_cols = [exp_col] + qr_features
+    if add_country_effects:
+        model_cols.append(country_col)
 
-            valid_fit = group.dropna(subset=[exp_col] + qr_features)
-            if len(valid_fit) < min_rows:
-                print(f"⚠️ {country}: skipped (too few valid rows: {len(valid_fit)})")
-                continue
+    pooled = out[model_cols].copy()
+    pooled = pooled.replace([np.inf, -np.inf], np.nan)
 
-            formula = f"{exp_col} ~ " + " + ".join(qr_features)
-            model = smf.quantreg(formula, data=valid_fit)
-            res = model.fit(q=quantile, max_iter=5000, disp=False)
+    valid_fit = pooled.dropna()
 
-            valid_pred = group.dropna(subset=qr_features)
-            if len(valid_pred) == 0:
-                print(f"⚠️ {country}: no rows available for prediction")
-                continue
+    if len(valid_fit) < min_rows:
+        raise ValueError(
+            f"Too few valid rows for pooled quantile regression: {len(valid_fit)} < {min_rows}"
+        )
 
-            expected = pd.Series(index=group.index, dtype=float)
-            expected.loc[valid_pred.index] = res.predict(valid_pred)
+    # Build formula
+    rhs_terms = qr_features.copy()
+    if add_country_effects:
+        rhs_terms.append(f"C({country_col})")
 
-            out.loc[group.index, "expected_exp"] = expected
-            out.loc[group.index, "relative_exp"] = group[exp_col] - expected
-            out.loc[group.index, "high_exp_flag"] = (group[exp_col] > expected).fillna(False)
-            out.loc[group.index, "qr_valid_flag"] = True
+    formula = f"{exp_col} ~ " + " + ".join(rhs_terms)
 
-            print(
-                f"[{country}] HQRTM q={quantile:.2f}, "
-                f"pseudo_R2={getattr(res, 'prsquared', np.nan):.3f}, "
-                f"high_exp={(group[exp_col] > expected).mean():.2%}, "
-                f"n_fit={len(valid_fit)}"
-            )
+    try:
+        model = smf.quantreg(formula, data=valid_fit)
+        res = model.fit(q=quantile, max_iter=5000, disp=False)
 
-        except Exception as e:
-            print(f"⚠️ Quantile regression failed for {country}: {e}")
+        valid_pred = pooled.dropna(subset=qr_features + ([country_col] if add_country_effects else []))
 
-    # ---------- four classes ----------
+        if len(valid_pred) == 0:
+            raise ValueError("No rows available for prediction after filtering qr features.")
+
+        expected = pd.Series(index=out.index, dtype=float)
+        expected.loc[valid_pred.index] = res.predict(valid_pred)
+
+        out["expected_exp"] = expected
+        out["relative_exp"] = out[exp_col] - out["expected_exp"]
+
+        margin = np.nanstd(valid_fit[exp_col]) * margin_scale
+        out["high_exp_flag"] = (out[exp_col] > (out["expected_exp"] + margin)).fillna(False)
+        out.loc[valid_pred.index, "qr_valid_flag"] = True
+
+        print(
+            f"[Pooled HQRTM] q={quantile:.2f}, "
+            f"pseudo_R2={getattr(res, 'prsquared', np.nan):.3f}, "
+            f"high_exp={out['high_exp_flag'].mean():.2%}, "
+            f"n_fit={len(valid_fit)}"
+        )
+
+        # Optional diagnostic by country
+        print("\nHigh expenditure rate by country:")
+        print(
+            out.groupby(country_col)["high_exp_flag"]
+               .mean()
+               .sort_index()
+               .round(4)
+        )
+
+    except Exception as e:
+        raise RuntimeError(f"Pooled quantile regression failed: {e}")
+
+    # -----------------------------
+    # Four-class categorization
+    # -----------------------------
     out["risk_category"] = np.select(
         [
             out["low_income"] & out["high_exp_flag"],
