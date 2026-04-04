@@ -1,0 +1,14 @@
+{
+    "dataset": "hqrtm_q60",
+    "model_name": "B1_structural",
+    "features": [
+        "floor_area",
+        "house_age",
+        "household_size",
+        "house_detachment",
+        "has_insulation",
+        "heating_strategy"
+    ],
+    "cat_features": [],
+    "k": 3
+}
