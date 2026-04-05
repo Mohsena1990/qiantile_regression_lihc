@@ -10,7 +10,7 @@ class CatBoostML:
     CatBoost wrapper compatible with both CPU and GPU.
 
     Notes
-    -----
+    ----
     - Set params={"task_type": "CPU"} for CPU
     - Set params={"task_type": "GPU", "devices": "0"} for GPU
     - Removes incompatible parameter combinations automatically
@@ -38,49 +38,41 @@ class CatBoostML:
         self._sanitize_params()
         self.model = CatBoostClassifier(**self.params)
         self.class_weights = None
+        self.evals_result = {}
 
     def _sanitize_params(self) -> None:
-        """
-        Remove incompatible parameter combinations for CPU/GPU.
-        """
+        """Remove incompatible parameter combinations for CPU/GPU."""
         task_type = str(self.params.get("task_type", "CPU")).upper()
 
-        # Normalize task_type
         if task_type not in {"CPU", "GPU"}:
             self.params["task_type"] = "CPU"
             task_type = "CPU"
 
-        # If CPU, remove devices if accidentally passed
         if task_type == "CPU" and "devices" in self.params:
             self.params.pop("devices", None)
 
-        # If GPU, keep only valid devices if supplied
         if task_type == "GPU":
             if "devices" in self.params and self.params["devices"] in [None, "", -1]:
                 self.params.pop("devices", None)
 
-            # rsm is not supported in some GPU/non-pairwise setups
             if "rsm" in self.params:
-                print("⚠️ Removing 'rsm' for broader GPU compatibility.")
+                print("Removing 'rsm' for broader GPU compatibility.")
                 self.params.pop("rsm", None)
 
-        # Bayesian bootstrap does not use subsample
         if self.params.get("bootstrap_type") == "Bayesian" and "subsample" in self.params:
-            print("⚠️ Removing 'subsample' (not used with Bayesian bootstrap).")
+            print("Removing 'subsample' (not used with Bayesian bootstrap).")
             self.params.pop("subsample", None)
 
-        # bagging_temperature is only meaningful with Bayesian bootstrap
         if self.params.get("bootstrap_type") != "Bayesian" and "bagging_temperature" in self.params:
             self.params.pop("bagging_temperature", None)
 
     def _rebuild_model(self) -> None:
         self._sanitize_params()
         self.model = CatBoostClassifier(**self.params)
+        self.evals_result = {}
 
     def set_class_weights(self, y_train: pd.Series, scale: float = 1.0):
-        """
-        Compute inverse-frequency class weights.
-        """
+        """Compute inverse-frequency class weights."""
         classes, counts = np.unique(y_train, return_counts=True)
         total = len(y_train)
 
@@ -102,7 +94,7 @@ class CatBoostML:
         cat_features: Optional[Union[List[int], List[str]]] = None,
         early_stopping_rounds: int = 150,
         use_best_model: bool = True,
-        use_class_weights: bool = False
+        use_class_weights: bool = False,
     ):
         if use_class_weights:
             self.set_class_weights(y_train)
@@ -116,15 +108,16 @@ class CatBoostML:
             train_pool,
             eval_set=eval_set,
             use_best_model=use_best_model if eval_set is not None else False,
-            early_stopping_rounds=early_stopping_rounds if eval_set is not None else None
+            early_stopping_rounds=early_stopping_rounds if eval_set is not None else None,
         )
+        self.evals_result = self.model.get_evals_result()
 
     def evaluate(
         self,
         X_eval: pd.DataFrame,
         y_eval: pd.Series,
         cat_features: Optional[Union[List[int], List[str]]] = None,
-        split_name: str = "Evaluation"
+        split_name: str = "Evaluation",
     ) -> Tuple[float, pd.Series]:
         eval_pool = Pool(X_eval, cat_features=cat_features)
         preds = self.model.predict(eval_pool)
@@ -136,14 +129,18 @@ class CatBoostML:
 
         return acc, pd.Series(preds, index=y_eval.index)
 
+    def get_evals_result(self) -> dict:
+        return self.evals_result or {}
+
     def load_model(self, model_path: str):
         self.model = CatBoostClassifier()
         self.model.load_model(model_path)
+        self.evals_result = {}
 
     def predict_proba(
         self,
         X_new: pd.DataFrame,
-        cat_features: Optional[Union[List[int], List[str]]] = None
+        cat_features: Optional[Union[List[int], List[str]]] = None,
     ) -> pd.DataFrame:
         X_new = X_new.copy()
 
@@ -158,7 +155,7 @@ class CatBoostML:
     def predict(
         self,
         X_new: pd.DataFrame,
-        cat_features: Optional[Union[List[int], List[str]]] = None
+        cat_features: Optional[Union[List[int], List[str]]] = None,
     ) -> pd.Series:
         X_new = X_new.copy()
 
@@ -184,5 +181,5 @@ class CatBoostML:
 
         return pd.DataFrame({
             "Feature": feature_names,
-            "Importance": importances
+            "Importance": importances,
         }).sort_values(by="Importance", ascending=False)

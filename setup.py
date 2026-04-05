@@ -6,6 +6,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         "pandas",
+        "matplotlib",
         "scikit-learn",
         "catboost",
         # add any other dependencies here

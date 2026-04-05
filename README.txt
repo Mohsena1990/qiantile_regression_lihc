@@ -1,52 +1,153 @@
-### cleaning, imputation, feature engineering, outlier removal, and target creation
+LIHC / HQRTM CatBoost Pipeline
+==============================
 
+Overview
+--------
+This repository trains CatBoost classifiers on leakage-safe LIHC and HQRTM label variants, evaluates them with country-aware grouped cross-validation, and exports static plus dynamic visual diagnostics for model comparison, fit checking, and dataset description.
 
+Core Feature Blocks
+-------------------
+BASE_STRUCTURAL
+- floor_area
+- house_age
+- dwelling_type
+- insulation_count
+- main_heating_source
+- heating_control
+- household_size
+- children_present
+- elderly_present
 
-# new features
+CONTEXT_FEATURES
+- Country
+- SettlementSize
+- S6
+- C2
+- C3
 
-Equivalized Income After Housing Costs (AHC)
+SOCIOECONOMIC_AUX
+- equivalized_income
 
-Description: Adjusts household income for family composition (equivalization) and subtracts housing costs (rent/mortgage) to reflect disposable income for energy bills, aligning with LIHC's low-income threshold.
-LIHC Alignment: Core metric; defines the 40th percentile income threshold.
-Derivation: Use S1Ac1-S1Bc3 (household members by age/gender) for equivalization (e.g., OECD scale: 1.0 for first adult, 0.5 for others, 0.3 for children). Proxy housing costs from S8 (income feeling) or assume a flat rate (e.g., 20% of income if unavailable).
-Implementation: df['equivalized_income_ahc'] = df['income_continuous'] / equivalization_factor - (0.2 * df['income_continuous'])
+QR_FEATURES
+- floor_area
+- house_age
+- dwelling_type
+- insulation_count
+- main_heating_source
+- household_size
 
+Training Pipeline
+-----------------
+Main runner:
+- `UKK/LIHC-Informed-Socio-Economic-Predictors/model/baseline1(CatBoost)/catboost_run_preprocessed.py`
 
-Modeled Energy Expenditure (Standardized Cost)
+The updated runner now saves, for each dataset / model / k combination:
+- `cv_results.csv`: fold-level train and validation metrics
+- `learning_curve_fold_<fold>.csv`: per-fold CatBoost evaluation history
+- `learning_curves_long.csv`: stacked learning-curve history across folds
+- `learning_curve_summary.csv`: mean and std by split / metric / iteration
+- `final_split_metrics.csv`: final-train versus test metrics for the saved final model
+- `train_confusion_matrix.csv`: confusion matrix on the final training split
+- `confusion_matrix.csv`: confusion matrix on the holdout test split
+- `summary_metrics.csv`: rich summary row including train, validation, final-train, and test statistics
+- `all_results_summary.csv`: project-level summary table
 
-Description: Estimates energy costs based on dwelling characteristics (e.g., floor area, insulation, heating type) rather than actual bills, as per BREDEM in the Handbook.
-LIHC Alignment: Defines the high-cost threshold (80th percentile); accounts for efficiency.
-Derivation: Combine H3 (floor area group, midpoint), H5A1-H5A4 (insulation types, binary 'has_insulation'), H6A1-H6A11 (heating sources, primary type), and H7AA (heating months). Use a simple model: cost = floor_area * heating_months * (1 - insulation_factor) * heating_type_factor.
-Implementation: df['modeled_energy_cost'] = df['floor_area'] * df['H7AA'] * (1 - df['has_insulation'].astype(int) * 0.2) * heating_type_weight
+Run the training pipeline with:
+- `python3 UKK/LIHC-Informed-Socio-Economic-Predictors/model/baseline1(CatBoost)/catboost_run_preprocessed.py`
 
+Important note:
+- The new fit-diagnostic plots require rerunning the training pipeline once, because the old saved summaries do not contain the new train and learning-curve artifacts.
 
-Dwelling Energy Efficiency Score
+Visualization Modules
+---------------------
+Result summary module:
+- `UKK/LIHC-Informed-Socio-Economic-Predictors/visualization/result_summary.py`
+- Creates high-resolution comparison plots from `all_results_summary.csv`.
 
-Description: Aggregates efficiency indicators (e.g., insulation, house age, renewable installations) into a single score, reflecting potential energy cost variations.
-LIHC Alignment: Supports high-cost threshold by quantifying efficiency impact.
-Derivation: Score from H2 (house age, reverse-scaled), H5A1-H5A4 (insulation, sum), H10A1-H10A5 (renewables, binary). Normalize to 0-1.
-Implementation: df['efficiency_score'] = (1 - (df['house_age'] / max_age)) + df['has_insulation'].sum(axis=1) + df['has_renewables'].astype(int)
+Training fit diagnostics:
+- `UKK/LIHC-Informed-Socio-Economic-Predictors/visualization/training_fit_diagnostics.py`
+- Uses the updated saved train, validation, and learning-curve artifacts to assess whether models look underfit or overfit.
+- Outputs include:
+  - `train_validation_test_best_configs.png`
+  - `learning_curves_best_configs.png`
 
+Dataset statistical analysis:
+- `UKK/LIHC-Informed-Socio-Economic-Predictors/visualization/dataset_feature_analysis.py`
+- Produces quantitative analysis for the selected structural, context, socioeconomic, and QR feature groups.
 
-Household Size-Adjusted Energy Demand
+Dynamic storytelling assets:
+- `UKK/LIHC-Informed-Socio-Economic-Predictors/visualization/dynamic_pipeline_story.py`
+- Produces self-contained animated HTML files for communication and README-linked storytelling.
 
-Description: Adjusts energy expenditure by household size to account for per-capita needs, refining the high-cost threshold.
-LIHC Alignment: Ensures fair comparison across households, aligning with equivalization.
-Derivation: Use S1Ac1-S1Bc3 (sum for household_size) to normalize H7A1 (heating cost) or H8A (electricity bill): demand = expenditure / household_size.
-Implementation: df['adjusted_energy_demand'] = df['total_expenditure'] / df['household_size']
+Generated Dataset Analysis Outputs
+----------------------------------
+Generated in:
+- `final_saved_models_catboost/dataset_analysis`
 
+Artifacts:
+- `selected_feature_summary.csv`
+  Brief description: statistical summary table with dtype, missingness, unique count, and basic descriptive statistics.
+- `numeric_feature_distributions.png`
+  Brief description: histogram grid for the main quantitative structural and socioeconomic variables.
+- `categorical_feature_distributions.png`
+  Brief description: top-category distributions for key structural and context variables.
+- `selected_feature_missingness.png`
+  Brief description: missing-data percentages across the selected analysis features.
+- `numeric_feature_correlation.png`
+  Brief description: correlation heatmap for the main quantitative selected features.
+- `income_vs_expenditure_scatter.png`
+  Brief description: quantitative relationship between equivalized income and total expenditure, colored by household size.
+- `floor_area_vs_expenditure_scatter.png`
+  Brief description: quantitative relationship between floor area and total expenditure, colored by equivalized income.
 
-Housing Cost Burden Ratio
+Run with:
+- `python3 UKK/LIHC-Informed-Socio-Economic-Predictors/visualization/dataset_feature_analysis.py`
 
-Description: Ratio of housing costs (rent/mortgage) to income, indicating affordability pressure that affects energy spending capacity.
-LIHC Alignment: Indirectly influences low-income threshold by reducing disposable income.
-Derivation: Proxy from S8 (income feeling, e.g., 1=Comfortable as low burden, 4=Very difficult as high) or assume 20-30% of income as housing cost (Handbook standard).
-Implementation: df['housing_cost_burden'] = np.where(df['S8'] > 2, 0.3, 0.2) * df['income_continuous']
+Generated Dynamic HTML Outputs
+------------------------------
+Generated in:
+- `final_saved_models_catboost/dynamic_visualizations`
 
+Artifacts:
+- `pipeline_flow.html`
+  Brief description: animated step-by-step flowchart of the full modeling and reporting pipeline.
+- `model_metric_story.html`
+  Brief description: animated model-ranking story that cycles through datasets and compares test macro-F1 across model families.
+- `feature_group_story.html`
+  Brief description: dynamic feature-group explainer for the structural, context, socioeconomic, and quantile-regression blocks.
 
-Seasonal Energy Cost Variation
+Run with:
+- `python3 UKK/LIHC-Informed-Socio-Economic-Predictors/visualization/dynamic_pipeline_story.py`
 
-Description: Captures variability in energy costs (e.g., heating months, air conditioning use) to refine the 80th percentile threshold.
-LIHC Alignment: High-cost threshold depends on peak expenditure periods.
-Derivation: Use H7AA (heating months) and C2-C2A (AC use) to adjust H7A1/H8A: seasonal_cost = monthly_cost * (heating_months / 12 + ac_use_factor).
-Implementation: df['seasonal_energy_cost'] = df['H7A1'] * (df['H7AA'] / 12 + df['C2'].astype(int) * 0.1)
+Existing High-Resolution Result Summary Outputs
+-----------------------------------------------
+Generated in:
+- `final_saved_models_catboost/result_summary_plots`
+
+Key artifacts:
+- `metric_trends_test_macro_f1.png`
+- `best_configuration_by_dataset.png`
+- `cv_vs_test_macro_f1.png`
+- `cv_vs_test_metric_comparison.png`
+- `confusion_matrix_comparison_best_configs.png`
+- `train_vs_test_diagnostics.png`
+- `heatmap_test_accuracy.png`
+- `heatmap_test_macro_f1.png`
+- `heatmap_test_weighted_f1.png`
+
+Recommended Workflow
+--------------------
+1. Run preprocessing if the clean dataset needs to be regenerated.
+2. Run `catboost_run_preprocessed.py` to regenerate the saved model artifacts with the richer train and validation logging.
+3. Run `training_fit_diagnostics.py` to inspect real train, validation, and test behavior.
+4. Run `result_summary.py` for high-resolution model-comparison figures.
+5. Run `dataset_feature_analysis.py` for the quantitative dataset-description figures.
+6. Run `dynamic_pipeline_story.py` for animated HTML storytelling assets.
+
+Interpretation Guidance
+-----------------------
+Use the updated artifacts together:
+- Compare train versus validation curves to check optimization stability.
+- Compare final train versus test metrics to inspect generalization gaps.
+- Use confusion-matrix comparisons to identify class-specific weaknesses.
+- Use the dataset-analysis figures to explain how the selected feature blocks behave statistically before modeling.

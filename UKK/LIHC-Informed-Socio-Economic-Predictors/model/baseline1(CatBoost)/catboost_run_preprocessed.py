@@ -1,6 +1,6 @@
 # ======================================================
 # FINAL RUNNING MODULE
-# 4 datasets × 4 model baselines × k = {2, 3, 4, 5}
+# 4 datasets × 4 model baselines × k = {2, 3, 4}
 # SMOTE/SMOTENC-ready, leakage-aware, CPU/GPU-compatible
 # ======================================================
 
@@ -77,8 +77,9 @@ K_VALUES = [2, 3, 4]
 TEST_SIZE = 0.25
 RANDOM_STATE = 42
 
-TASK_TYPE = "CPU"   # change to "GPU" if needed
-DEVICES = "0"       # used only if TASK_TYPE == "GPU"
+TASK_TYPE = "CPU"
+DEVICES = "0"
+PRIMARY_METRICS = ["accuracy", "macro_f1", "weighted_f1", "macro_precision", "macro_recall"]
 
 
 # ======================================================
@@ -101,7 +102,7 @@ CONTEXT_FEATURES = [
     "SettlementSize",
     "S6",
     "C2",
-    "C3"
+    "C3",
 ]
 
 SOCIOECONOMIC_AUX = [
@@ -115,14 +116,13 @@ MODEL_SPECS = {
     "B4_structural_context_socioeconomic": BASE_STRUCTURAL + CONTEXT_FEATURES + SOCIOECONOMIC_AUX,
 }
 
-# Columns that should be handled as categorical
 CATEGORICAL_LIKE = {
     "Country",
     "dwelling_type",
     "main_heating_source",
     "ownership",
     "heating_control",
-    "SettlementSize"
+    "SettlementSize",
 }
 
 QR_FEATURES = [
@@ -154,10 +154,6 @@ def create_labels_for_split(
     dataset_name: str,
     config: dict,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Build labels using train-only fit and then apply to train/test.
-    This removes label-construction leakage.
-    """
     if config["label_type"] == "traditional":
         train_labeled = assign_traditional_lihc(
             train_df,
@@ -215,9 +211,6 @@ def fit_feature_preprocessor(
     features: list,
     categorical_cols: list | None = None,
 ) -> dict:
-    """
-    Fit preprocessing statistics on train only.
-    """
     categorical_cols = set(categorical_cols or [])
     numeric_medians = {}
 
@@ -239,9 +232,6 @@ def transform_features(
     features: list,
     processor: dict,
 ) -> pd.DataFrame:
-    """
-    Apply train-fitted preprocessing to any split.
-    """
     out = df.copy()
     categorical_cols = processor["categorical_cols"]
     numeric_medians = processor["numeric_medians"]
@@ -276,11 +266,11 @@ def assert_no_nan(df: pd.DataFrame, cols: list, dataset_name: str, model_name: s
 
 def compute_metrics(y_true: pd.Series, y_pred: pd.Series) -> dict:
     return {
-        "accuracy": accuracy_score(y_true, y_pred),
-        "macro_f1": f1_score(y_true, y_pred, average="macro"),
-        "weighted_f1": f1_score(y_true, y_pred, average="weighted"),
-        "macro_precision": precision_score(y_true, y_pred, average="macro", zero_division=0),
-        "macro_recall": recall_score(y_true, y_pred, average="macro", zero_division=0),
+        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "macro_f1": float(f1_score(y_true, y_pred, average="macro")),
+        "weighted_f1": float(f1_score(y_true, y_pred, average="weighted")),
+        "macro_precision": float(precision_score(y_true, y_pred, average="macro", zero_division=0)),
+        "macro_recall": float(recall_score(y_true, y_pred, average="macro", zero_division=0)),
     }
 
 
@@ -293,12 +283,8 @@ def oversample_training_data(
     y_train: pd.Series,
     cat_features: list,
     random_state: int = 42,
-    sampling_strategy: str = "not majority"
+    sampling_strategy: str = "not majority",
 ):
-    """
-    Apply SMOTENC if categorical columns exist, else fall back to SMOTE.
-    Used only for final model training if oversampling is enabled.
-    """
     X_res = X_train.copy()
     y_res = y_train.copy()
 
@@ -307,16 +293,47 @@ def oversample_training_data(
         sampler = SMOTENC(
             categorical_features=cat_indices,
             sampling_strategy=sampling_strategy,
-            random_state=random_state
+            random_state=random_state,
         )
     else:
         sampler = SMOTE(
             sampling_strategy=sampling_strategy,
-            random_state=random_state
+            random_state=random_state,
         )
 
     X_res, y_res = sampler.fit_resample(X_res, y_res)
     return X_res, y_res
+
+
+def build_metric_summary(metric_df: pd.DataFrame, source_cols: dict, prefix: str) -> dict:
+    summary = {}
+    for metric_name, column_name in source_cols.items():
+        series = pd.to_numeric(metric_df[column_name], errors="coerce")
+        summary[f"{prefix}_{metric_name}_mean"] = float(series.mean())
+        summary[f"{prefix}_{metric_name}_std"] = float(series.std(ddof=1)) if len(series) > 1 else 0.0
+    return summary
+
+
+def evals_result_to_long_df(evals_result: dict, fold: int) -> pd.DataFrame:
+    rows = []
+    for split_name, metrics in (evals_result or {}).items():
+        for metric_name, values in metrics.items():
+            for iteration, value in enumerate(values, start=1):
+                rows.append(
+                    {
+                        "fold": fold,
+                        "split": split_name,
+                        "metric": metric_name,
+                        "iteration": iteration,
+                        "value": float(value),
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
+def save_json(data: dict, path: str) -> None:
+    with open(path, "w") as handle:
+        json.dump(data, handle, indent=4)
 
 
 # ======================================================
@@ -335,12 +352,11 @@ for dataset_name, dataset_config in DATASET_CONFIGS.items():
     print(f"Label config: {dataset_config}")
     print(f"{'=' * 80}")
 
-    # Split first, then build labels from train-only fit
     train_df_raw, test_df_raw = train_test_split(
         base_df,
         test_size=TEST_SIZE,
         stratify=base_df["Country"],
-        random_state=RANDOM_STATE
+        random_state=RANDOM_STATE,
     )
 
     train_df, test_df = create_labels_for_split(
@@ -363,7 +379,6 @@ for dataset_name, dataset_config in DATASET_CONFIGS.items():
 
         cat_features = [f for f in features if f in CATEGORICAL_LIKE]
 
-        # Train-fitted preprocessing only
         processor = fit_feature_preprocessor(train_df, features, categorical_cols=cat_features)
         train_df_model = transform_features(train_df, features, processor)
         test_df_model = transform_features(test_df, features, processor)
@@ -377,14 +392,21 @@ for dataset_name, dataset_config in DATASET_CONFIGS.items():
             run_dir = os.path.join(MODEL_DIR, dataset_name, model_name, f"k{k}")
             os.makedirs(run_dir, exist_ok=True)
 
-            # --------------------------------------------------
-            # Country-aware grouped CV folds
-            # --------------------------------------------------
             split_df = train_df_model[features + [TARGET]].copy()
             if "Country" not in split_df.columns:
                 split_df["Country"] = train_df_model["Country"].values
 
-            folds = country_stratified_group_split(
+            raw_folds = country_stratified_group_split(
+                df=split_df,
+                inputs=features,
+                target=TARGET,
+                n_splits=k,
+                random_state=RANDOM_STATE,
+                use_smote=False,
+                categorical_cols=cat_features,
+                sampling_strategy="not majority",
+            )
+            fit_folds = country_stratified_group_split(
                 df=split_df,
                 inputs=features,
                 target=TARGET,
@@ -392,15 +414,11 @@ for dataset_name, dataset_config in DATASET_CONFIGS.items():
                 random_state=RANDOM_STATE,
                 use_smote=True,
                 categorical_cols=cat_features,
-                sampling_strategy="not majority"
+                sampling_strategy="not majority",
             )
 
-            # --------------------------------------------------
-            # Fine tuning
-            # Keep imbalance strategy consistent: SMOTE + no class weights
-            # --------------------------------------------------
             best_params = tune_catboost(
-                folds=folds,
+                folds=fit_folds,
                 features=features,
                 cat_features=cat_features,
                 score_metric="macro_f1",
@@ -408,129 +426,196 @@ for dataset_name, dataset_config in DATASET_CONFIGS.items():
                 devices=DEVICES if TASK_TYPE.upper() == "GPU" else None,
                 n_iter=20,
                 random_state=RANDOM_STATE,
-                output_file=os.path.join(run_dir, "tuning_results.csv")
+                output_file=os.path.join(run_dir, "tuning_results.csv"),
             )
 
             best_params = {
-                k_: (v.item() if isinstance(v, np.generic) else v)
-                for k_, v in best_params.items()
+                key: (value.item() if isinstance(value, np.generic) else value)
+                for key, value in best_params.items()
             }
 
-            with open(os.path.join(run_dir, "best_params.json"), "w") as f:
-                json.dump(best_params, f, indent=4)
+            save_json(best_params, os.path.join(run_dir, "best_params.json"))
+            save_json(
+                {
+                    "dataset": dataset_name,
+                    "model_name": model_name,
+                    "features": features,
+                    "cat_features": cat_features,
+                    "k": k,
+                },
+                os.path.join(run_dir, "features.json"),
+            )
+            save_json(
+                {
+                    "dataset": dataset_name,
+                    "model_name": model_name,
+                    "k": k,
+                    "train_size": int(len(train_df_model)),
+                    "test_size": int(len(test_df_model)),
+                    "train_class_counts": train_df_model[TARGET].value_counts().to_dict(),
+                    "test_class_counts": test_df_model[TARGET].value_counts().to_dict(),
+                },
+                os.path.join(run_dir, "data_split_summary.json"),
+            )
 
-            with open(os.path.join(run_dir, "features.json"), "w") as f:
-                json.dump(
-                    {
-                        "dataset": dataset_name,
-                        "model_name": model_name,
-                        "features": features,
-                        "cat_features": cat_features,
-                        "k": k,
-                    },
-                    f,
-                    indent=4,
-                )
-
-            # --------------------------------------------------
-            # Cross-validation
-            # --------------------------------------------------
             cv_rows = []
+            learning_curve_frames = []
 
-            for fold_id, (X_tr, X_val, y_tr, y_val) in enumerate(folds, start=1):
+            for fold_id, (raw_fold, fit_fold) in enumerate(zip(raw_folds, fit_folds), start=1):
+                X_tr_raw, X_val_raw, y_tr_raw, y_val_raw = raw_fold
+                X_tr_fit, _, y_tr_fit, _ = fit_fold
+
                 model = CatBoostML(params=best_params)
-
                 model.train(
-                    X_train=X_tr[features],
-                    y_train=y_tr,
-                    X_val=X_val[features],
-                    y_val=y_val,
+                    X_train=X_tr_fit[features],
+                    y_train=y_tr_fit,
+                    X_val=X_val_raw[features],
+                    y_val=y_val_raw,
                     cat_features=cat_features,
-                    use_class_weights=False
+                    use_class_weights=False,
                 )
 
-                y_val_pred = model.predict(X_val[features], cat_features=cat_features)
-                fold_metrics = compute_metrics(y_val, y_val_pred)
-                fold_metrics["fold"] = fold_id
-                cv_rows.append(fold_metrics)
+                y_train_pred = model.predict(X_tr_raw[features], cat_features=cat_features)
+                y_val_pred = model.predict(X_val_raw[features], cat_features=cat_features)
+
+                train_metrics = compute_metrics(y_tr_raw, y_train_pred)
+                validation_metrics = compute_metrics(y_val_raw, y_val_pred)
+
+                fold_row = {
+                    "fold": fold_id,
+                    "train_size_raw": int(len(X_tr_raw)),
+                    "train_size_fit": int(len(X_tr_fit)),
+                    "validation_size": int(len(X_val_raw)),
+                }
+                fold_row.update({f"train_{key}": value for key, value in train_metrics.items()})
+                fold_row.update(validation_metrics)
+                fold_row.update({f"validation_{key}": value for key, value in validation_metrics.items()})
+                cv_rows.append(fold_row)
+
+                learning_curve_df = evals_result_to_long_df(model.get_evals_result(), fold=fold_id)
+                if not learning_curve_df.empty:
+                    learning_curve_frames.append(learning_curve_df)
+                    learning_curve_df.to_csv(
+                        os.path.join(run_dir, f"learning_curve_fold_{fold_id}.csv"),
+                        index=False,
+                    )
 
                 model.model.save_model(os.path.join(run_dir, f"catboost_fold_{fold_id}.cbm"))
 
             cv_df = pd.DataFrame(cv_rows)
             cv_df.to_csv(os.path.join(run_dir, "cv_results.csv"), index=False)
 
+            if learning_curve_frames:
+                learning_curves_long = pd.concat(learning_curve_frames, ignore_index=True)
+                learning_curves_long.to_csv(os.path.join(run_dir, "learning_curves_long.csv"), index=False)
+                learning_curve_summary = (
+                    learning_curves_long.groupby(["split", "metric", "iteration"], as_index=False)["value"]
+                    .agg(["mean", "std"])
+                    .reset_index()
+                )
+                learning_curve_summary.columns = ["split", "metric", "iteration", "mean", "std"]
+                learning_curve_summary.to_csv(
+                    os.path.join(run_dir, "learning_curve_summary.csv"),
+                    index=False,
+                )
+
+            train_summary = build_metric_summary(
+                cv_df,
+                {metric: f"train_{metric}" for metric in PRIMARY_METRICS},
+                prefix="train",
+            )
+            validation_summary = build_metric_summary(
+                cv_df,
+                {metric: metric for metric in PRIMARY_METRICS},
+                prefix="validation",
+            )
             cv_summary = {
-                "cv_accuracy_mean": cv_df["accuracy"].mean(),
-                "cv_accuracy_std": cv_df["accuracy"].std(),
-                "cv_macro_f1_mean": cv_df["macro_f1"].mean(),
-                "cv_macro_f1_std": cv_df["macro_f1"].std(),
-                "cv_weighted_f1_mean": cv_df["weighted_f1"].mean(),
-                "cv_weighted_f1_std": cv_df["weighted_f1"].std(),
+                "cv_accuracy_mean": validation_summary["validation_accuracy_mean"],
+                "cv_accuracy_std": validation_summary["validation_accuracy_std"],
+                "cv_macro_f1_mean": validation_summary["validation_macro_f1_mean"],
+                "cv_macro_f1_std": validation_summary["validation_macro_f1_std"],
+                "cv_weighted_f1_mean": validation_summary["validation_weighted_f1_mean"],
+                "cv_weighted_f1_std": validation_summary["validation_weighted_f1_std"],
             }
 
-            # --------------------------------------------------
-            # Final model on full training split
-            # Use the same imbalance strategy as CV: oversampling, no class weights
-            # --------------------------------------------------
-            X_train_final = train_df_model[features].copy()
-            y_train_final = train_df_model[TARGET].copy()
-
-            X_train_final, y_train_final = oversample_training_data(
-                X_train_final,
-                y_train_final,
+            X_train_final_raw = train_df_model[features].copy()
+            y_train_final_raw = train_df_model[TARGET].copy()
+            X_train_final_fit, y_train_final_fit = oversample_training_data(
+                X_train_final_raw,
+                y_train_final_raw,
                 cat_features=cat_features,
                 random_state=RANDOM_STATE,
-                sampling_strategy="not majority"
+                sampling_strategy="not majority",
             )
 
             final_model = CatBoostML(params=best_params)
             final_model.train(
-                X_train=X_train_final,
-                y_train=y_train_final,
+                X_train=X_train_final_fit,
+                y_train=y_train_final_fit,
                 X_val=None,
                 y_val=None,
                 cat_features=cat_features,
-                use_class_weights=False
+                use_class_weights=False,
             )
-
             final_model.model.save_model(os.path.join(run_dir, "catboost_final.cbm"))
 
-            # --------------------------------------------------
-            # Holdout test evaluation
-            # --------------------------------------------------
             X_test = test_df_model[features].copy()
             y_test = test_df_model[TARGET].copy()
 
+            y_train_final_pred = final_model.predict(X_train_final_raw, cat_features=cat_features)
             y_test_pred = final_model.predict(X_test, cat_features=cat_features)
+
+            final_train_metrics = compute_metrics(y_train_final_raw, y_train_final_pred)
             test_metrics = compute_metrics(y_test, y_test_pred)
 
-            cm = confusion_matrix(y_test, y_test_pred, labels=final_model.model.classes_)
-            cm_df = pd.DataFrame(
-                cm,
-                index=[f"true_{c}" for c in final_model.model.classes_],
-                columns=[f"pred_{c}" for c in final_model.model.classes_]
+            split_metrics_df = pd.DataFrame(
+                [
+                    {"split": "train_final", **final_train_metrics},
+                    {"split": "test", **test_metrics},
+                ]
             )
-            save_confusion_matrix(cm_df, os.path.join(run_dir, "confusion_matrix.csv"))
+            split_metrics_df.to_csv(os.path.join(run_dir, "final_split_metrics.csv"), index=False)
+
+            test_cm = confusion_matrix(y_test, y_test_pred, labels=final_model.model.classes_)
+            test_cm_df = pd.DataFrame(
+                test_cm,
+                index=[f"true_{cls}" for cls in final_model.model.classes_],
+                columns=[f"pred_{cls}" for cls in final_model.model.classes_],
+            )
+            save_confusion_matrix(test_cm_df, os.path.join(run_dir, "confusion_matrix.csv"))
+
+            train_cm = confusion_matrix(y_train_final_raw, y_train_final_pred, labels=final_model.model.classes_)
+            train_cm_df = pd.DataFrame(
+                train_cm,
+                index=[f"true_{cls}" for cls in final_model.model.classes_],
+                columns=[f"pred_{cls}" for cls in final_model.model.classes_],
+            )
+            save_confusion_matrix(train_cm_df, os.path.join(run_dir, "train_confusion_matrix.csv"))
 
             result_row = {
                 "dataset": dataset_name,
                 "model_name": model_name,
                 "k": k,
+                **train_summary,
+                **validation_summary,
                 **cv_summary,
+                "final_train_accuracy": final_train_metrics["accuracy"],
+                "final_train_macro_f1": final_train_metrics["macro_f1"],
+                "final_train_weighted_f1": final_train_metrics["weighted_f1"],
+                "final_train_macro_precision": final_train_metrics["macro_precision"],
+                "final_train_macro_recall": final_train_metrics["macro_recall"],
                 "test_accuracy": test_metrics["accuracy"],
                 "test_macro_f1": test_metrics["macro_f1"],
                 "test_weighted_f1": test_metrics["weighted_f1"],
                 "test_macro_precision": test_metrics["macro_precision"],
                 "test_macro_recall": test_metrics["macro_recall"],
+                "train_test_accuracy_gap": final_train_metrics["accuracy"] - test_metrics["accuracy"],
+                "train_test_macro_f1_gap": final_train_metrics["macro_f1"] - test_metrics["macro_f1"],
+                "train_test_weighted_f1_gap": final_train_metrics["weighted_f1"] - test_metrics["weighted_f1"],
             }
 
             all_results.append(result_row)
-
-            pd.DataFrame([result_row]).to_csv(
-                os.path.join(run_dir, "summary_metrics.csv"),
-                index=False
-            )
-
+            pd.DataFrame([result_row]).to_csv(os.path.join(run_dir, "summary_metrics.csv"), index=False)
             print(pd.DataFrame([result_row]))
 
 
@@ -540,7 +625,7 @@ for dataset_name, dataset_config in DATASET_CONFIGS.items():
 all_results_df = pd.DataFrame(all_results)
 all_results_df = all_results_df.sort_values(
     by=["dataset", "model_name", "k", "test_macro_f1"],
-    ascending=[True, True, True, False]
+    ascending=[True, True, True, False],
 )
 
 master_path = os.path.join(MODEL_DIR, "all_results_summary.csv")
