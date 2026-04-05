@@ -4,11 +4,18 @@
     "features": [
         "floor_area",
         "house_age",
+        "dwelling_type",
+        "insulation_count",
+        "main_heating_source",
+        "heating_control",
         "household_size",
-        "house_detachment",
-        "has_insulation",
-        "heating_strategy"
+        "children_present",
+        "elderly_present"
     ],
-    "cat_features": [],
+    "cat_features": [
+        "dwelling_type",
+        "main_heating_source",
+        "heating_control"
+    ],
     "k": 3
 }

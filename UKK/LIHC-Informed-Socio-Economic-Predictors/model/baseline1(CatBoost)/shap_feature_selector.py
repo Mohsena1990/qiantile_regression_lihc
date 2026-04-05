@@ -39,7 +39,7 @@ class SHAPAnalyzer:
         y_val: Optional[pd.Series] = None,
         cat_features: Optional[List[str]] = None,
         params: Optional[dict] = None,
-        use_class_weights: bool = True
+        use_class_weights: bool = False
     ):
         """
         Train CatBoost model and create SHAP explainer.

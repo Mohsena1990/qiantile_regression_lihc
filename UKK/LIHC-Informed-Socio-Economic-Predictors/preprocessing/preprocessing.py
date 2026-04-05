@@ -10,7 +10,7 @@ from risk_category import assign_traditional_lihc, assign_hqrtm
 # =========================
 # Config
 # =========================
-DATA_PATH = r"C:\Users\Ilani\OneDrive\Desktop\EP\LIHC-Informed-Socio-Economic-Predictors\UKK\LIHC-Informed-Socio-Economic-Predictors\ENABLE.EU_dataset_survey of households.xlsx"
+DATA_PATH = r"/home/mohsen/project/qiantile_regression_lihc/ENABLE.EU_dataset_survey of households.xlsx"
 OUTPUT_CLEAN = "preprocessed_data_clean.csv"
 OUTPUT_LIHC = "df_lihc.csv"
 OUTPUT_HQRTM_60 = "df_hqrtm_60.csv"

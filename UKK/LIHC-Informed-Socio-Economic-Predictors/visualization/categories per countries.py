@@ -171,22 +171,22 @@ def plot_country_risk_distribution(
 if __name__ == "__main__":
     file_configs = [
         {
-            "path": r"C:\Users\Ilani\OneDrive\Desktop\EP\LIHC-Informed-Socio-Economic-Predictors\df_hqrtm_60.csv",
+            "path": r"/home/mohsen/project/qiantile_regression_lihc/df_hqrtm_60.csv",
             "title": "HQRTM (q = 0.60): Energy Poverty Risk Distribution by Country",
             "output": "country_risk_distribution_hqrtm_60.png",
         },
         {
-            "path": r"C:\Users\Ilani\OneDrive\Desktop\EP\LIHC-Informed-Socio-Economic-Predictors\df_hqrtm_65.csv",
+            "path": r"/home/mohsen/project/qiantile_regression_lihc/df_hqrtm_65.csv",
             "title": "HQRTM (q = 0.65): Energy Poverty Risk Distribution by Country",
             "output": "country_risk_distribution_hqrtm_65.png",
         },
         {
-            "path": r"C:\Users\Ilani\OneDrive\Desktop\EP\LIHC-Informed-Socio-Economic-Predictors\df_hqrtm_70.csv",
+            "path": r"/home/mohsen/project/qiantile_regression_lihc/df_hqrtm_70.csv",
             "title": "HQRTM (q = 0.70): Energy Poverty Risk Distribution by Country",
             "output": "country_risk_distribution_hqrtm_70.png",
         },
         {
-            "path": r"C:\Users\Ilani\OneDrive\Desktop\EP\LIHC-Informed-Socio-Economic-Predictors\df_lihc.csv",
+            "path": r"/home/mohsen/project/qiantile_regression_lihc/df_lihc.csv",
             "title": "Traditional LIHC: Energy Poverty Risk Distribution by Country",
             "output": "country_risk_distribution_traditional_lihc.png",
         },

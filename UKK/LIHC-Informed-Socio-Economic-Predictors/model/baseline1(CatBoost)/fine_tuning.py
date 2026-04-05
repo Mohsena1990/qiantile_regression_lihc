@@ -49,7 +49,7 @@ def evaluate_catboost_params(
             X_val=X_val[features],
             y_val=y_val,
             cat_features=fold_cat_features,
-            use_class_weights=True
+            use_class_weights=False
         )
 
         preds = model.predict(X_val[features], cat_features=fold_cat_features)

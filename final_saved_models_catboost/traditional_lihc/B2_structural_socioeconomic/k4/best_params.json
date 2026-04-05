@@ -1,8 +1,8 @@
 {
     "iterations": 300,
-    "learning_rate": 0.03,
+    "learning_rate": 0.05,
     "depth": 6,
-    "l2_leaf_reg": 20,
+    "l2_leaf_reg": 10,
     "bootstrap_type": "Bernoulli",
     "subsample": 0.9,
     "verbose": 0,

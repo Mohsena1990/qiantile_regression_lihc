@@ -5,6 +5,7 @@
 # ======================================================
 
 import os
+import sys
 import json
 import numpy as np
 import pandas as pd
@@ -25,17 +26,50 @@ from fine_tuning import tune_catboost
 
 
 # ======================================================
-# 1️⃣ Paths and configuration
+# 1 Paths and configuration
 # ======================================================
-BASE_DIR = r"C:\Users\Ilani\OneDrive\Desktop\EP\LIHC-Informed-Socio-Economic-Predictors"
+
+BASE_DIR = r"/home/mohsen/project/qiantile_regression_lihc"
 MODEL_DIR = os.path.join(BASE_DIR, "final_saved_models_catboost")
 os.makedirs(MODEL_DIR, exist_ok=True)
 
-DATASETS = {
-    "traditional_lihc": os.path.join(BASE_DIR, "df_lihc.csv"),
-    "hqrtm_q60": os.path.join(BASE_DIR, "df_hqrtm_60.csv"),
-    "hqrtm_q65": os.path.join(BASE_DIR, "df_hqrtm_65.csv"),
-    "hqrtm_q70": os.path.join(BASE_DIR, "df_hqrtm_70.csv"),
+PREPROCESS_DIR = os.path.join(
+    BASE_DIR,
+    "UKK",
+    "LIHC-Informed-Socio-Economic-Predictors",
+    "preprocessing",
+)
+if PREPROCESS_DIR not in sys.path:
+    sys.path.append(PREPROCESS_DIR)
+
+from risk_category import assign_traditional_lihc, assign_hqrtm
+
+BASE_DATA_PATH = os.path.join(BASE_DIR, "preprocessed_data_clean.csv")
+
+DATASET_CONFIGS = {
+    "traditional_lihc": {
+        "label_type": "traditional",
+        "income_rule": "country_median_60",
+        "exp_quantile": 0.80,
+    },
+    "hqrtm_q60": {
+        "label_type": "hqrtm",
+        "income_rule": "country_median_60",
+        "quantile": 0.60,
+        "margin_scale": 0.10,
+    },
+    "hqrtm_q65": {
+        "label_type": "hqrtm",
+        "income_rule": "country_median_60",
+        "quantile": 0.65,
+        "margin_scale": 0.10,
+    },
+    "hqrtm_q70": {
+        "label_type": "hqrtm",
+        "income_rule": "country_median_60",
+        "quantile": 0.70,
+        "margin_scale": 0.10,
+    },
 }
 
 TARGET = "risk_category"
@@ -48,7 +82,7 @@ DEVICES = "0"       # used only if TASK_TYPE == "GPU"
 
 
 # ======================================================
-# 2️⃣ Feature blocks
+# 2 Feature blocks
 # ======================================================
 BASE_STRUCTURAL = [
     "floor_area",
@@ -91,9 +125,18 @@ CATEGORICAL_LIKE = {
     "SettlementSize"
 }
 
+QR_FEATURES = [
+    "floor_area",
+    "house_age",
+    "dwelling_type",
+    "insulation_count",
+    "main_heating_source",
+    "household_size",
+]
+
 
 # ======================================================
-# 3️⃣ Helper functions
+# 3 Helper functions
 # ======================================================
 def ensure_required_columns(df: pd.DataFrame, cols: list, dataset_name: str, model_name: str = "") -> None:
     missing = [c for c in cols if c not in df.columns]
@@ -105,18 +148,103 @@ def ensure_required_columns(df: pd.DataFrame, cols: list, dataset_name: str, mod
         raise KeyError(f"{prefix} Missing required columns: {missing}")
 
 
-def prepare_features(
+def create_labels_for_split(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    dataset_name: str,
+    config: dict,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Build labels using train-only fit and then apply to train/test.
+    This removes label-construction leakage.
+    """
+    if config["label_type"] == "traditional":
+        train_labeled = assign_traditional_lihc(
+            train_df,
+            income_col="equivalized_income",
+            exp_col="total_expenditure",
+            country_col="Country",
+            income_rule=config.get("income_rule", "country_median_60"),
+            exp_quantile=config.get("exp_quantile", 0.80),
+            fit_df=train_df,
+        )
+        test_labeled = assign_traditional_lihc(
+            test_df,
+            income_col="equivalized_income",
+            exp_col="total_expenditure",
+            country_col="Country",
+            income_rule=config.get("income_rule", "country_median_60"),
+            exp_quantile=config.get("exp_quantile", 0.80),
+            fit_df=train_df,
+        )
+    elif config["label_type"] == "hqrtm":
+        train_labeled = assign_hqrtm(
+            train_df,
+            qr_features=QR_FEATURES,
+            income_col="equivalized_income",
+            exp_col="total_expenditure",
+            country_col="Country",
+            income_rule=config.get("income_rule", "country_median_60"),
+            quantile=config.get("quantile", 0.65),
+            add_country_effects=True,
+            margin_scale=config.get("margin_scale", 0.10),
+            fit_df=train_df,
+        )
+        test_labeled = assign_hqrtm(
+            test_df,
+            qr_features=QR_FEATURES,
+            income_col="equivalized_income",
+            exp_col="total_expenditure",
+            country_col="Country",
+            income_rule=config.get("income_rule", "country_median_60"),
+            quantile=config.get("quantile", 0.65),
+            add_country_effects=True,
+            margin_scale=config.get("margin_scale", 0.10),
+            fit_df=train_df,
+        )
+    else:
+        raise ValueError(f"Unknown label_type for dataset {dataset_name}: {config['label_type']}")
+
+    train_labeled = train_labeled.dropna(subset=[TARGET]).copy()
+    test_labeled = test_labeled.dropna(subset=[TARGET]).copy()
+    return train_labeled, test_labeled
+
+
+def fit_feature_preprocessor(
+    train_df: pd.DataFrame,
+    features: list,
+    categorical_cols: list | None = None,
+) -> dict:
+    """
+    Fit preprocessing statistics on train only.
+    """
+    categorical_cols = set(categorical_cols or [])
+    numeric_medians = {}
+
+    for col in features:
+        if col in categorical_cols:
+            continue
+        series = pd.to_numeric(train_df[col], errors="coerce").replace([np.inf, -np.inf], np.nan)
+        med = series.median()
+        numeric_medians[col] = 0.0 if pd.isna(med) else float(med)
+
+    return {
+        "categorical_cols": categorical_cols,
+        "numeric_medians": numeric_medians,
+    }
+
+
+def transform_features(
     df: pd.DataFrame,
     features: list,
-    categorical_cols: list | None = None
+    processor: dict,
 ) -> pd.DataFrame:
     """
-    Clean only the supplied feature columns.
-    Categorical-like columns are cast to string.
-    Numeric columns are coerced to numeric and imputed.
+    Apply train-fitted preprocessing to any split.
     """
     out = df.copy()
-    categorical_cols = categorical_cols or []
+    categorical_cols = processor["categorical_cols"]
+    numeric_medians = processor["numeric_medians"]
 
     for col in features:
         if col not in out.columns:
@@ -132,12 +260,7 @@ def prepare_features(
         else:
             out[col] = pd.to_numeric(out[col], errors="coerce")
             out[col] = out[col].replace([np.inf, -np.inf], np.nan)
-
-            med = out[col].median()
-            if pd.isna(med):
-                out[col] = out[col].fillna(0)
-            else:
-                out[col] = out[col].fillna(med)
+            out[col] = out[col].fillna(numeric_medians.get(col, 0.0))
 
     return out
 
@@ -197,44 +320,53 @@ def oversample_training_data(
 
 
 # ======================================================
-# 4️⃣ Main experiment loop
+# 4 Main experiment loop
 # ======================================================
 all_results = []
 
-for dataset_name, dataset_path in DATASETS.items():
+base_df = pd.read_csv(BASE_DATA_PATH, low_memory=False)
+ensure_required_columns(base_df, ["Country", "equivalized_income", "total_expenditure"], "base_data")
+base_df = base_df.dropna(subset=["Country", "equivalized_income", "total_expenditure"]).copy()
+
+for dataset_name, dataset_config in DATASET_CONFIGS.items():
     print(f"\n{'=' * 80}")
     print(f"Dataset: {dataset_name}")
-    print(f"Path: {dataset_path}")
+    print(f"Source: {BASE_DATA_PATH}")
+    print(f"Label config: {dataset_config}")
     print(f"{'=' * 80}")
 
-    df = pd.read_csv(dataset_path, low_memory=False)
-    df = df.dropna(subset=[TARGET]).copy()
-
-    ensure_required_columns(df, ["Country", TARGET], dataset_name)
-
-    train_df, test_df = train_test_split(
-        df,
+    # Split first, then build labels from train-only fit
+    train_df_raw, test_df_raw = train_test_split(
+        base_df,
         test_size=TEST_SIZE,
-        stratify=df[TARGET],
+        stratify=base_df["Country"],
         random_state=RANDOM_STATE
     )
 
+    train_df, test_df = create_labels_for_split(
+        train_df=train_df_raw,
+        test_df=test_df_raw,
+        dataset_name=dataset_name,
+        config=dataset_config,
+    )
+
     print("Train size:", len(train_df), "| Test size:", len(test_df))
+    print("Train class counts:\n", train_df[TARGET].value_counts())
+    print("Test class counts:\n", test_df[TARGET].value_counts())
 
     for model_name, features in MODEL_SPECS.items():
         print(f"\n--- Model: {model_name} ---")
         print("Features:", features)
 
-        ensure_required_columns(train_df, features, dataset_name, model_name)
-        ensure_required_columns(test_df, features, dataset_name, model_name)
+        ensure_required_columns(train_df, features + [TARGET], dataset_name, model_name)
+        ensure_required_columns(test_df, features + [TARGET], dataset_name, model_name)
 
         cat_features = [f for f in features if f in CATEGORICAL_LIKE]
 
-        train_df_model = train_df.copy()
-        test_df_model = test_df.copy()
-
-        train_df_model = prepare_features(train_df_model, features, categorical_cols=cat_features)
-        test_df_model = prepare_features(test_df_model, features, categorical_cols=cat_features)
+        # Train-fitted preprocessing only
+        processor = fit_feature_preprocessor(train_df, features, categorical_cols=cat_features)
+        train_df_model = transform_features(train_df, features, processor)
+        test_df_model = transform_features(test_df, features, processor)
 
         assert_no_nan(train_df_model, features, dataset_name, model_name, "train_df_model")
         assert_no_nan(test_df_model, features, dataset_name, model_name, "test_df_model")
@@ -248,8 +380,12 @@ for dataset_name, dataset_path in DATASETS.items():
             # --------------------------------------------------
             # Country-aware grouped CV folds
             # --------------------------------------------------
+            split_df = train_df_model[features + [TARGET]].copy()
+            if "Country" not in split_df.columns:
+                split_df["Country"] = train_df_model["Country"].values
+
             folds = country_stratified_group_split(
-                df=pd.concat([train_df_model[features], train_df_model[TARGET]], axis=1),
+                df=split_df,
                 inputs=features,
                 target=TARGET,
                 n_splits=k,
@@ -261,6 +397,7 @@ for dataset_name, dataset_path in DATASETS.items():
 
             # --------------------------------------------------
             # Fine tuning
+            # Keep imbalance strategy consistent: SMOTE + no class weights
             # --------------------------------------------------
             best_params = tune_catboost(
                 folds=folds,
@@ -398,7 +535,7 @@ for dataset_name, dataset_path in DATASETS.items():
 
 
 # ======================================================
-# 5️⃣ Save master summary
+# 5 Save master summary
 # ======================================================
 all_results_df = pd.DataFrame(all_results)
 all_results_df = all_results_df.sort_values(
@@ -409,5 +546,5 @@ all_results_df = all_results_df.sort_values(
 master_path = os.path.join(MODEL_DIR, "all_results_summary.csv")
 all_results_df.to_csv(master_path, index=False)
 
-print(f"\n✅ Finished. Master summary saved to: {master_path}")
+print(f"\nFinished. Master summary saved to: {master_path}")
 print(all_results_df)

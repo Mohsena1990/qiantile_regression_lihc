@@ -1,0 +1,2 @@
+dataset,model_name,k,cv_accuracy_mean,cv_accuracy_std,cv_macro_f1_mean,cv_macro_f1_std,cv_weighted_f1_mean,cv_weighted_f1_std,test_accuracy,test_macro_f1,test_weighted_f1,test_macro_precision,test_macro_recall
+hqrtm_q70,B3_structural_context,3,0.68831241801929,0.06015332150127575,0.3471115282389201,0.012319241345422803,0.6727962313220828,0.03441980669811834,0.6343627973020944,0.4085819253692845,0.6602032128929834,0.38911740624654584,0.4645578410929636

@@ -1,0 +1,2 @@
+dataset,model_name,k,cv_accuracy_mean,cv_accuracy_std,cv_macro_f1_mean,cv_macro_f1_std,cv_weighted_f1_mean,cv_weighted_f1_std,test_accuracy,test_macro_f1,test_weighted_f1,test_macro_precision,test_macro_recall
+hqrtm_q65,B4_structural_context_socioeconomic,3,0.7044405880202514,0.05061107045755077,0.3896854940438792,0.08701280172299647,0.6776048145360446,0.04835449794830456,0.7866524671636492,0.5863031217896174,0.7822647315453157,0.5857024322328341,0.5879778069530415
