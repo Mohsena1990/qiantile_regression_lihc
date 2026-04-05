@@ -32,7 +32,7 @@ COUNTRY_ORDER = [
     "Serbia",
     "Spain",
     "Ukraine",
-    "United Kingdom",
+    "UK",
 ]
 
 RISK_ORDER = ["No risk", "Income risk", "Expenditure risk", "Double risk"]

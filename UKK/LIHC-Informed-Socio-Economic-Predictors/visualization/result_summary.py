@@ -465,7 +465,7 @@ def plot_cv_test_metric_comparison(results: pd.DataFrame, output_dir: Path) -> P
 
 def plot_confusion_matrix_comparison(results: pd.DataFrame, output_dir: Path) -> Path:
     best_rows = _best_rows_by_dataset(results)
-    fig, axes = plt.subplots(2, 2, figsize=(20, 18))
+    fig, axes = plt.subplots(2, 2, figsize=(16, 14))
     axes = axes.ravel()
 
     for idx, (_, row) in enumerate(best_rows.iterrows()):
@@ -503,8 +503,8 @@ def plot_confusion_matrix_comparison(results: pd.DataFrame, output_dir: Path) ->
     for ax in axes[len(best_rows):]:
         ax.axis("off")
 
-    cbar = fig.colorbar(image, ax=axes.tolist(), shrink=0.8)
-    cbar.set_label("Row-normalized percentage", rotation=270, labelpad=28, fontweight="bold")
+    # cbar = fig.colorbar(image, ax=axes.tolist(), shrink=0.8)
+    # cbar.set_label("Row-normalized percentage", rotation=270, labelpad=28, fontweight="bold")
     fig.suptitle("Comparison Confusion Matrices for the Best Configuration in Each Dataset", fontsize=25, fontweight="bold", y=1.01)
 
     output_path = output_dir / "confusion_matrix_comparison_best_configs.png"

@@ -74,31 +74,43 @@ def evaluate_catboost_params(
 
 def build_param_grid(task_type="CPU", devices=None):
     """
-    Small, transparent CatBoost parameter grid aligned with the paper strategy.
+    Random-search candidate pool for CatBoost tuning.
+
+    The space is intentionally broader than the original paper-style grid so
+    tuning can better explore the macro-F1 tradeoff on this imbalanced
+    multiclass task.
     """
-    base_grid = {
-        "iterations": [300, 500],
-        "learning_rate": [0.03, 0.05, 0.1],
+    param_list = []
+    common_grid = {
+        "iterations": [300, 500, 700, 1000],
+        "learning_rate": [0.01, 0.03, 0.05, 0.1],
         "depth": [4, 6, 8],
-        "l2_leaf_reg": [3, 10, 20],
-        "bootstrap_type": ["Bernoulli"],
-        "subsample": [0.7, 0.9],
+        "l2_leaf_reg": [3, 10, 20, 30],
         "verbose": [0],
         "loss_function": ["MultiClass"],
-        "eval_metric": ["Accuracy"],
+        "eval_metric": ["TotalF1:average=Macro"],
         "task_type": [task_type],
     }
 
     if task_type.upper() == "GPU" and devices is not None:
-        base_grid["devices"] = [devices]
+        common_grid["devices"] = [devices]
 
-    keys = list(base_grid.keys())
-    values = list(base_grid.values())
+    bernoulli_grid = common_grid | {
+        "bootstrap_type": ["Bernoulli"],
+        "subsample": [0.7, 0.85, 0.9],
+    }
 
-    param_list = []
-    for combo in itertools.product(*values):
-        params = dict(zip(keys, combo))
-        param_list.append(params)
+    bayesian_grid = common_grid | {
+        "bootstrap_type": ["Bayesian"],
+        "bagging_temperature": [0, 1, 3],
+    }
+
+    for sub_grid in (bernoulli_grid, bayesian_grid):
+        keys = list(sub_grid.keys())
+        values = list(sub_grid.values())
+        for combo in itertools.product(*values):
+            params = dict(zip(keys, combo))
+            param_list.append(params)
 
     return param_list
 
@@ -122,7 +134,7 @@ def tune_catboost(
     score_metric="macro_f1",
     task_type="CPU",
     devices=None,
-    n_iter=20,
+    n_iter=60,
     random_state=42,
     output_file="catboost_tuning_results.csv"
 ):

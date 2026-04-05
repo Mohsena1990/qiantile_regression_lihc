@@ -509,11 +509,9 @@ for dataset_name, dataset_config in DATASET_CONFIGS.items():
                 learning_curves_long = pd.concat(learning_curve_frames, ignore_index=True)
                 learning_curves_long.to_csv(os.path.join(run_dir, "learning_curves_long.csv"), index=False)
                 learning_curve_summary = (
-                    learning_curves_long.groupby(["split", "metric", "iteration"], as_index=False)["value"]
-                    .agg(["mean", "std"])
-                    .reset_index()
+                    learning_curves_long.groupby(["split", "metric", "iteration"], as_index=False)
+                    .agg(mean=("value", "mean"), std=("value", "std"))
                 )
-                learning_curve_summary.columns = ["split", "metric", "iteration", "mean", "std"]
                 learning_curve_summary.to_csv(
                     os.path.join(run_dir, "learning_curve_summary.csv"),
                     index=False,
