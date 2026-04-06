@@ -1,6 +1,6 @@
 LIHC / HQRTM CatBoost Pipeline
 ==============================
-
+https://github.com/Mohsena1990/qiantile_regression_lihc/blob/main/final_saved_models_catboost/dynamic_visualizations/feature_group_story.html
 Overview
 --------
 This repository trains CatBoost classifiers on leakage-safe LIHC and HQRTM label variants, evaluates them with country-aware grouped cross-validation, and exports static plus dynamic visual diagnostics for model comparison, fit checking, and dataset description.
