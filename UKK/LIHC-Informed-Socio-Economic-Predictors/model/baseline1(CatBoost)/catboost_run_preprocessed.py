@@ -123,6 +123,8 @@ CATEGORICAL_LIKE = {
     "ownership",
     "heating_control",
     "SettlementSize",
+    "C2",
+    "C3",
 }
 
 QR_FEATURES = [
@@ -241,8 +243,14 @@ def transform_features(
             continue
 
         if col in categorical_cols:
+            cat_series = out[col].copy()
+
+            if col in {"C2", "C3"}:
+                cat_series = pd.to_numeric(cat_series, errors="coerce")
+                cat_series = cat_series.replace([0, 99], np.nan)
+
             out[col] = (
-                out[col]
+                cat_series
                 .astype(str)
                 .replace(["nan", "None", "NaN"], np.nan)
                 .fillna("missing")
