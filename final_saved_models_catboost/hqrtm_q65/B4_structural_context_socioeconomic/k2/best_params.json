@@ -1,6 +1,6 @@
 {
     "iterations": 500,
-    "learning_rate": 0.01,
+    "learning_rate": 0.1,
     "depth": 8,
     "l2_leaf_reg": 30,
     "verbose": 0,
@@ -8,5 +8,5 @@
     "eval_metric": "TotalF1:average=Macro",
     "task_type": "CPU",
     "bootstrap_type": "Bernoulli",
-    "subsample": 0.85
+    "subsample": 0.7
 }

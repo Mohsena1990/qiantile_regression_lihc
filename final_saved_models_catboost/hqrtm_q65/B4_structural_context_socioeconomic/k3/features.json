@@ -12,10 +12,8 @@
         "children_present",
         "elderly_present",
         "Country",
-        "SettlementSize",
         "S6",
         "C2",
-        "C3",
         "equivalized_income"
     ],
     "cat_features": [
@@ -23,7 +21,7 @@
         "main_heating_source",
         "heating_control",
         "Country",
-        "SettlementSize"
+        "C2"
     ],
     "k": 3
 }

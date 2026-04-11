@@ -11,6 +11,7 @@ DEFAULT_SUMMARY_PATH = Path("final_saved_models_catboost/all_results_summary.csv
 DEFAULT_FEATURE_SUMMARY_PATH = Path("final_saved_models_catboost/dataset_analysis/selected_feature_summary.csv")
 DEFAULT_OUTPUT_DIR = Path("final_saved_models_catboost/dynamic_visualizations")
 
+
 BASE_STRUCTURAL = [
     "floor_area",
     "house_age",
@@ -22,16 +23,61 @@ BASE_STRUCTURAL = [
     "children_present",
     "elderly_present",
 ]
-CONTEXT_FEATURES = ["Country", "SettlementSize", "S6", "C2", "C3"]
-SOCIOECONOMIC_AUX = ["equivalized_income"]
+
+CONTEXT_FEATURES = [
+    "Country",
+    # "SettlementSize",
+    "S6",
+    "C2",
+    # "C3",
+]
+
+SOCIOECONOMIC_AUX = [
+    "equivalized_income",
+]
+
+
 QR_FEATURES = [
     "floor_area",
     "house_age",
     "dwelling_type",
     "insulation_count",
     "main_heating_source",
+    # "heating_control",
     "household_size",
+    # "Country"
+    # "children_present",
+    # "elderly_present",
+    # "C2",
+    # "SettlementSize",
+    # "C1A",
+    # "C1B",
+    # "C3"
 ]
+
+
+
+# BASE_STRUCTURAL = [
+#     "floor_area",
+#     "house_age",
+#     "dwelling_type",
+#     "insulation_count",
+#     "main_heating_source",
+#     "heating_control",
+#     "household_size",
+#     "children_present",
+#     "elderly_present",
+# ]
+# CONTEXT_FEATURES = ["Country", "SettlementSize", "S6", "C2", "C3"]
+# SOCIOECONOMIC_AUX = ["equivalized_income"]
+# QR_FEATURES = [
+#     "floor_area",
+#     "house_age",
+#     "dwelling_type",
+#     "insulation_count",
+#     "main_heating_source",
+#     "household_size",
+# ]
 
 PIPELINE_STEPS = [
     ("Raw Input", "Start from the cleaned household-level survey table and keep the core expenditure and income fields."),

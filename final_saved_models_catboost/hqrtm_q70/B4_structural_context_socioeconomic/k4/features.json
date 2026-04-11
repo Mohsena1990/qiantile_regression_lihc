@@ -15,7 +15,6 @@
         "SettlementSize",
         "S6",
         "C2",
-        "C3",
         "equivalized_income"
     ],
     "cat_features": [
@@ -23,7 +22,8 @@
         "main_heating_source",
         "heating_control",
         "Country",
-        "SettlementSize"
+        "SettlementSize",
+        "C2"
     ],
     "k": 4
 }

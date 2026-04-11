@@ -99,10 +99,10 @@ BASE_STRUCTURAL = [
 
 CONTEXT_FEATURES = [
     "Country",
-    "SettlementSize",
+    # "SettlementSize",
     "S6",
     "C2",
-    "C3",
+    # "C3",
 ]
 
 SOCIOECONOMIC_AUX = [

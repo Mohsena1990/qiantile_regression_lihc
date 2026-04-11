@@ -4,57 +4,77 @@
 import pandas as pd
 
 
+dir = r"/home/mohsen/project/qiantile_regression_lihc/df_hqrtm_60.csv"
+df = pd.read_csv(dir)
+
+# df['SettlementSize'].isnull().sum()
+# df['C3'].isnull().sum()
 
 
+print("SettlementSize unique values:")
+print(df['SettlementSize'].unique())
+
+print("\nC3 unique values:")
+print(df['C3'].unique())
+
+print("SettlementSize value counts:")
+print(df['SettlementSize'].value_counts(dropna=False))
+
+print("\nC3 value counts:")
+print(df['C3'].value_counts(dropna=False))
 
 
+print("SettlementSize types:")
+print(df['SettlementSize'].apply(type).value_counts())
+
+print("\nC3 types:")
+print(df['C3'].apply(type).value_counts())
+
+# For SettlementSize
+non_numeric_ss = df[pd.to_numeric(df['SettlementSize'], errors='coerce').isna()]
+print(non_numeric_ss['SettlementSize'].unique())
+
+# For C3
+non_numeric_c3 = df[pd.to_numeric(df['C3'], errors='coerce').isna()]
+print(non_numeric_c3['C3'].unique())
 
 
+print("SettlementSize null rows:")
+print(df[df['SettlementSize'].isnull()])
+
+print("\nC3 null rows:")
+print(df[df['C3'].isnull()])
 
 
-def dataframe(path):
+print("========================================")
 
-    
+import pandas as pd
 
-    # main data of EP
-    df_main = pd.read_excel(path, sheet_name='ENABLE.EU_dataset_HH')
+dir = "/home/mohsen/project/qiantile_regression_lihc/df_hqrtm_60.csv"
+df = pd.read_csv(dir, low_memory=False)
 
-    # variable info
-    df_variables = pd.read_excel(path, sheet_name='variables (questions) labels')
+# Map SettlementSize
+settlement_map = {
+    1.0: "1",
+    2.0: "2",
+    3.0: "3",
+    4.0: "4",
+    5.0: "5"
+}
 
-    # variable values
-    df_label_value = pd.read_excel(path, sheet_name='variables value (answers) label')
+# Map C3
+c3_map = {
+    1.0: "All rooms same temperature",
+    2.0: "Only warm rooms used",
+    99.0: "Do not know"
+}
 
+df["SettlementSize_label"] = df["SettlementSize"].map(settlement_map)
+df["C3_label"] = df["C3"].map(c3_map)
 
-    print("--------- what you need to know about main data -----------------")
+print("SettlementSize with labels:")
+print(df[["SettlementSize", "SettlementSize_label"]].drop_duplicates().sort_values("SettlementSize"))
 
-    print(df_main.loc[:5])
-
-    print("******************** list of columns ***************")
-    col_list = df_main.columns.to_list()
-
-    print(col_list)
-
-    print("******************** columns' info ***************")
-
-
-    print(df_main.info())
-
-    print("******************** missing values ***************")
-    print(df_main.isnull().sum())
-
-
-    print("******************** statistically description of the data ***************")
-    print("count - The number of not-empty values.")
-    print("mean - The average (mean) value.")
-    print("std - The standard deviation.")
-    print("min - the minimum value.")
-    print("25% - The 25% percentile.")
-    print("50% - The 50% percentile.")
-    print("75% - The 75% percentile.")
-    print("max - the maximum value.")
-    print(df_main.describe(include='all'))
-
-
-    return df_main, df_variables, df_label_value, col_list
+print("\nC3 with labels:")
+print(df[["C3", "C3_label"]].drop_duplicates().sort_values("C3"))
 

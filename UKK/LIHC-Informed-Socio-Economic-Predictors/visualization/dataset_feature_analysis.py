@@ -11,6 +11,7 @@ DEFAULT_INPUT_PATH = Path("preprocessed_data_clean.csv")
 DEFAULT_OUTPUT_DIR = Path("final_saved_models_catboost/dataset_analysis")
 EXPORT_DPI = 900
 
+
 BASE_STRUCTURAL = [
     "floor_area",
     "house_age",
@@ -25,15 +26,16 @@ BASE_STRUCTURAL = [
 
 CONTEXT_FEATURES = [
     "Country",
-    "SettlementSize",
+    # "SettlementSize",
     "S6",
     "C2",
-    "C3",
+    # "C3",
 ]
 
 SOCIOECONOMIC_AUX = [
     "equivalized_income",
 ]
+
 
 QR_FEATURES = [
     "floor_area",
@@ -41,8 +43,18 @@ QR_FEATURES = [
     "dwelling_type",
     "insulation_count",
     "main_heating_source",
+    # "heating_control",
     "household_size",
+    # "Country"
+    # "children_present",
+    # "elderly_present",
+    # "C2",
+    # "SettlementSize",
+    # "C1A",
+    # "C1B",
+    # "C3"
 ]
+
 
 FEATURE_GROUPS = {
     "Base structural": BASE_STRUCTURAL,

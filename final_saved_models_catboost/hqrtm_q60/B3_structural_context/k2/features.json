@@ -12,17 +12,15 @@
         "children_present",
         "elderly_present",
         "Country",
-        "SettlementSize",
         "S6",
-        "C2",
-        "C3"
+        "C2"
     ],
     "cat_features": [
         "dwelling_type",
         "main_heating_source",
         "heating_control",
         "Country",
-        "SettlementSize"
+        "C2"
     ],
     "k": 2
 }

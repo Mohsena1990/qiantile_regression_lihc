@@ -98,10 +98,10 @@ QR_FEATURES = [
     # "children_present",
     # "elderly_present",
     # "C2",
-    # "SettlementSize",
+    "SettlementSize",
     # "C1A",
     # "C1B",
-    # "C3"
+    "C3"
 ]
 
 # =========================
@@ -164,6 +164,23 @@ df["S9MONTH_CAT"] = df["S9MONTH"].fillna(0).astype(int)
 
 df["S9YEAR"] = pd.to_numeric(df["S9YEAR"], errors="coerce").replace([98, 99], np.nan)
 df["S9YEAR_CAT"] = df["S9YEAR"].fillna(0).astype(int)
+
+
+df["C3"] = (
+    df["C3"]
+    .map({
+        1: "All rooms heated",
+        2: "Partial heating",
+        99: "Do not know"
+    })
+    .fillna("Missing")
+)
+
+df["SettlementSize"] = (
+    df["SettlementSize"]
+    .map({1: "1", 2: "2", 3: "3", 4: "4", 5: "5"})
+    .fillna("No answer")
+)
 
 df["SettlementSize"] = df.groupby("Country")["SettlementSize"].transform(
     lambda x: x.fillna(x.mode().iloc[0] if not x.mode().empty else x.median())
