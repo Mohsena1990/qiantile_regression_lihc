@@ -1308,3 +1308,100 @@ def assign_hqrtm(
     )
 
     return out
+
+
+
+import numpy as np
+import pandas as pd
+
+
+def assign_paper_lihc(
+    df: pd.DataFrame,
+    income_bracket_col: str = "income_bracket",
+    exp_col: str = "total_expenditure",
+    country_col: str = "Country",
+    exp_quantile: float = 0.80,
+    fit_df: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """
+    Paper-style LIHC categorization based on:
+      - low income: income bracket < 4
+      - high expenditure: above country-specific 80th percentile
+        of annual energy expenditure
+
+    This matches the framework used in:
+    van Hove, Dalla Longa, van der Zwaan (2022),
+    where the income threshold is set between deciles 3 and 4,
+    and the expenditure threshold is the 80th percentile within country.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Data to classify.
+    income_bracket_col : str
+        Survey income bracket / decile column (1-10).
+    exp_col : str
+        Annual energy expenditure column.
+    country_col : str
+        Country identifier column.
+    exp_quantile : float
+        Country-specific expenditure quantile. Default is 0.80.
+    fit_df : pd.DataFrame | None
+        Optional reference dataset on which thresholds are fitted and then
+        applied to df.
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of df with:
+        - low_income
+        - exp_threshold
+        - high_exp_flag
+        - risk_category
+    """
+    out = df.copy()
+    fit_source = out if fit_df is None else fit_df.copy()
+
+    required_cols = [country_col, income_bracket_col, exp_col]
+
+    missing_cols = [c for c in required_cols if c not in out.columns]
+    if missing_cols:
+        raise KeyError(f"Missing required columns: {missing_cols}")
+
+    missing_cols_fit = [c for c in required_cols if c not in fit_source.columns]
+    if missing_cols_fit:
+        raise KeyError(f"Missing required columns in fit_df: {missing_cols_fit}")
+
+    # low income: threshold between brackets 3 and 4
+    out["low_income"] = out[income_bracket_col] < 4
+
+    # high expenditure: country-specific expenditure quantile
+    exp_thresholds = fit_source.groupby(country_col)[exp_col].quantile(exp_quantile)
+    out["exp_threshold"] = out[country_col].map(exp_thresholds)
+
+    if out["exp_threshold"].isna().any():
+        missing_countries = sorted(
+            out.loc[out["exp_threshold"].isna(), country_col].dropna().unique().tolist()
+        )
+        raise ValueError(
+            f"Missing expenditure thresholds for countries: {missing_countries}"
+        )
+
+    out["high_exp_flag"] = out[exp_col] > out["exp_threshold"]
+
+    # four classes
+    out["risk_category"] = np.select(
+        [
+            out["low_income"] & out["high_exp_flag"],
+            out["low_income"] & ~out["high_exp_flag"],
+            ~out["low_income"] & out["high_exp_flag"],
+        ],
+        [
+            "Double risk",
+            "Income risk",
+            "Expenditure risk",
+        ],
+        default="No risk",
+    )
+
+    return out

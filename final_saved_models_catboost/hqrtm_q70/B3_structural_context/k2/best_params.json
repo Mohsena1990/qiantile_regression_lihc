@@ -1,8 +1,8 @@
 {
-    "iterations": 500,
-    "learning_rate": 0.03,
-    "depth": 8,
-    "l2_leaf_reg": 10,
+    "iterations": 700,
+    "learning_rate": 0.1,
+    "depth": 4,
+    "l2_leaf_reg": 30,
     "verbose": 0,
     "loss_function": "MultiClass",
     "eval_metric": "TotalF1:average=Macro",

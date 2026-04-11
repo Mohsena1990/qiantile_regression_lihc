@@ -4,7 +4,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 
 from missing_values import drop_feature
-from risk_category import assign_traditional_lihc, assign_hqrtm
+from risk_category import assign_hqrtm, assign_traditional_lihc
 
 
 # =========================
@@ -226,6 +226,13 @@ df["Country_name"] = df["Country"].map(COUNTRY_MAP)
 df["income_bracket"] = df.groupby("Country")["S9MONTH"].transform(
     lambda x: x.fillna(x.mode().iloc[0] if not x.mode().empty else 5)
 )
+
+# df["income_bracket1"] = pd.to_numeric(df["S9MONTH"], errors="coerce")
+
+# # remove invalid codes
+# df.loc[df["income_bracket1"].isin([98, 99]), "income_bracket"] = np.nan
+
+
 df["approx_income"] = df.apply(decile_to_income, axis=1)
 
 df["H8A_EUR"] = df.apply(
@@ -368,12 +375,20 @@ print("Shape after conservative tail capping:", df.shape)
 # =========================
 # Build labels
 # =========================
+# df_lihc = assign_traditional_lihc(
+#     df,
+#     income_col="equivalized_income",
+#     exp_col="total_expenditure",
+#     country_col="Country",
+#     income_rule="country_median_60",
+#     exp_quantile=0.80,
+# )
 df_lihc = assign_traditional_lihc(
     df,
-    income_col="equivalized_income",
     exp_col="total_expenditure",
     country_col="Country",
     income_rule="country_median_60",
+    income_bracket_col="income_bracket",
     exp_quantile=0.80,
 )
 
@@ -383,7 +398,7 @@ df_hqrtm_60 = assign_hqrtm(
     income_col="equivalized_income",
     exp_col="total_expenditure",
     country_col="Country",
-    income_rule="country_median_60",
+    income_rule="bracket_lt4",
     quantile=0.60,
     add_country_effects= True,
     margin_scale=0.10,
@@ -395,7 +410,7 @@ df_hqrtm_65 = assign_hqrtm(
     income_col="equivalized_income",
     exp_col="total_expenditure",
     country_col="Country",
-    income_rule="country_median_60",
+    income_rule="bracket_lt4",
     quantile=0.65,
     add_country_effects= True,
     margin_scale=0.10,
@@ -407,7 +422,7 @@ df_hqrtm_70 = assign_hqrtm(
     income_col="equivalized_income",
     exp_col="total_expenditure",
     country_col="Country",
-    income_rule="country_median_60",
+    income_rule="bracket_lt4",
     quantile=0.70,
     add_country_effects= True,
     margin_scale=0.10,
